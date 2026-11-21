@@ -1,0 +1,9 @@
+---
+# Role: k3s-agent
+# Nhiệm vụ:
+# - Cấu hình /etc/rancher/k3s/registries.yaml trust Root CA của Harbor.
+# - Cài đặt K3s Agent kết nối về Server qua K3S_URL=https://<Server_Private_IP>:6443 và K3S_TOKEN.
+# - Đảm bảo worker node sẵn sàng nhận workloads (FastAPI Pods, ArgoCD, Prometheus Stack).
+- name: Placeholder - Install K3s Worker Agent
+  ansible.builtin.debug:
+    msg: "K3s Agent role skeleton ready for Phase 2 implementation."

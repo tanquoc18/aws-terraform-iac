@@ -1,0 +1,18 @@
+---
+# Role: docker
+# Nhiệm vụ:
+# - Cài đặt Docker CE Engine, containerd và Docker Compose plugin chính thức trên EC2 Harbor.
+# - Thiết lập daemon.json: cấu hình log-driver json-file với max-size 50m để chống tràn ổ cứng EBS.
+# - Khởi động và kích hoạt service Docker chạy cùng OS.
+- name: Install prerequisite packages for Docker
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - curl
+      - gnupg
+    state: present
+    update_cache: true
+
+- name: Placeholder - Install Docker CE and Compose plugin
+  ansible.builtin.debug:
+    msg: "Docker role skeleton ready for Phase 2 implementation."

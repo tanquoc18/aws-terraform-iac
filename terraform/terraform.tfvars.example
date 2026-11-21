@@ -1,0 +1,12 @@
+# terraform/terraform.tfvars.example
+# USAGE: cp terraform.tfvars.example terraform.tfvars
+# CẢNH BÁO: Không commit terraform.tfvars (chứa secrets)
+
+aws_region    = "us-east-1"
+environment   = "lab"
+project_name  = "devops-2tier"
+my_ip_cidr    = "1.2.3.4/32"   # Thay bằng IP thực: curl ifconfig.me
+key_pair_name = "devops-lab-key"
+db_username   = "appuser"
+db_name       = "appdb"
+db_password   = "CHANGE_ME_STRONG_PASSWORD"

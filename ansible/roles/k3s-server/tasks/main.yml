@@ -1,0 +1,10 @@
+---
+# Role: k3s-server
+# Nhiệm vụ:
+# - Cài đặt K3s Control Plane (v1.29.5+k3s1) kèm flags: --tls-san <EIP>, --tls-san <Private_IP>.
+# - Giữ nguyên Traefik Ingress Controller và Klipper ServiceLB mặc định.
+# - Cấu hình /etc/rancher/k3s/registries.yaml trust Root CA của Harbor.
+# - Trích xuất file kubeconfig và k3s cluster token lưu về local/vault để worker node join vào.
+- name: Placeholder - Install K3s Control Plane
+  ansible.builtin.debug:
+    msg: "K3s Server role skeleton ready for Phase 2 implementation."

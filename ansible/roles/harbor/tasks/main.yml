@@ -1,0 +1,10 @@
+---
+# Role: harbor
+# Nhiệm vụ:
+# - Sinh Self-Signed Root CA và Server Certificate (SAN: hub.<EIP>.nip.io).
+# - Tải Harbor Offline Installer (v2.10+), giải nén vào /opt/harbor.
+# - Dùng template harbor.yml.j2 cấu hình HTTPS:443, admin password, dữ liệu lưu trữ 60GB gp3.
+# - Chạy ./install.sh --with-trivy và xác thực qua API https://hub.../api/v2.0/ping.
+- name: Placeholder - Setup Harbor Registry
+  ansible.builtin.debug:
+    msg: "Harbor role skeleton ready for Phase 2 implementation."

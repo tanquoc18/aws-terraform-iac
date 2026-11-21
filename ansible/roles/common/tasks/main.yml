@@ -1,0 +1,22 @@
+---
+# Role: common
+# Nhiệm vụ:
+# - Cấu hình múi giờ (Asia/Ho_Chi_Minh), cập nhật apt packages cơ bản (curl, wget, htop, ca-certificates).
+# - Tắt Swap vĩnh viễn (bắt buộc cho Kubernetes K3s).
+# - Cấu hình sysctl: net.ipv4.ip_forward=1, bridge-nf-call-iptables=1 cho CNI Flannel.
+- name: Ensure swap is disabled (Required for K3s)
+  ansible.builtin.command: swapoff -a
+  changed_when: false
+
+- name: Remove swap entry from /etc/fstab
+  ansible.builtin.replace:
+    path: /etc/fstab
+    regexp: '^(\s*)([^#\n]+\s+swap\s+\w+\s+\w+\s+\w+)'
+    replace: '# \2'
+
+- name: Enable kernel IP forwarding
+  ansible.posix.sysctl:
+    name: net.ipv4.ip_forward
+    value: '1'
+    state: present
+    reload: true

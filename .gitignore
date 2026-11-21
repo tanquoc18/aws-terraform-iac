@@ -1,0 +1,21 @@
+# Terraform
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+*.tfvars
+!terraform.tfvars.example
+.terraform/
+.terraform.lock.hcl
+
+# Ansible & Secrets
+*.pem
+*.key
+*.retry
+ansible/inventory/hosts.ini
+ansible/group_vars/vault.yml
+
+# OS & IDE
+.DS_Store
+.idea/
+.vscode/

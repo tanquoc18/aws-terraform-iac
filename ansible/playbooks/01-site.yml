@@ -1,0 +1,27 @@
+---
+# Playbook tổng điều phối triển khai hạ tầng cấu hình OS (Ansible)
+- name: 1. Áp dụng cấu hình cơ sở (All nodes)
+  hosts: all
+  become: true
+  roles:
+    - common
+
+- name: 2. Triển khai Docker & Harbor Registry trên EC2 Harbor
+  hosts: harbor
+  become: true
+  roles:
+    - docker
+    - harbor
+    - monitoring-agent
+
+- name: 3. Khởi tạo K3s Control Plane Server
+  hosts: k3s_server
+  become: true
+  roles:
+    - k3s-server
+
+- name: 4. Nối K3s Worker Agent vào cụm
+  hosts: k3s_worker
+  become: true
+  roles:
+    - k3s-agent

@@ -1,0 +1,8 @@
+---
+# Role: monitoring-agent
+# Nhiệm vụ:
+# - Tải và cài đặt Node Exporter (binary standalone) dưới dạng systemd service trên EC2 Harbor.
+# - Mở port 9100 cục bộ để cụm K3s (Prometheus trên Worker) cào metrics OS/EBS thời gian thực.
+- name: Placeholder - Setup Node Exporter
+  ansible.builtin.debug:
+    msg: "Monitoring Agent role skeleton ready for Phase 2 implementation."
