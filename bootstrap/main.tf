@@ -22,7 +22,7 @@ variable "aws_region" {
 }
 
 variable "bucket_name" {
-  default = "devops-lab-tfstate-us-east-1"
+  default     = "devops-lab-tfstate-us-east-1"
   description = "Tên S3 bucket lưu Terraform state (phải globally unique)"
 }
 
@@ -30,8 +30,8 @@ resource "aws_s3_bucket" "tfstate" {
   bucket        = var.bucket_name
   force_destroy = false # Bảo vệ state khỏi xóa nhầm
   tags = {
-    Name    = "Terraform State Bucket"
-    Project = "DevOps-2Tier"
+    Name      = "Terraform State Bucket"
+    Project   = "DevOps-2Tier"
     ManagedBy = "Terraform-Bootstrap"
   }
 }
