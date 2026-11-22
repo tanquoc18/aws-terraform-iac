@@ -1,10 +1,155 @@
 ---
 # Role: harbor
-# Nhiệm vụ:
-# - Sinh Self-Signed Root CA và Server Certificate (SAN: hub.<EIP>.nip.io).
-# - Tải Harbor Offline Installer (v2.10+), giải nén vào /opt/harbor.
-# - Dùng template harbor.yml.j2 cấu hình HTTPS:443, admin password, dữ liệu lưu trữ 60GB gp3.
-# - Chạy ./install.sh --with-trivy và xác thực qua API https://hub.../api/v2.0/ping.
-- name: Placeholder - Setup Harbor Registry
-  ansible.builtin.debug:
-    msg: "Harbor role skeleton ready for Phase 2 implementation."
+# Automated deployment of Harbor HTTPS Registry on dedicated 60GB EBS mount
+
+- name: Check if /dev/xvdf filesystem is formatted
+  ansible.builtin.command: blkid /dev/xvdf
+  register: ebs_blkid
+  failed_when: false
+  changed_when: false
+
+- name: Format /dev/xvdf with ext4 filesystem
+  community.general.filesystem:
+    fstype: ext4
+    dev: /dev/xvdf
+  when: ebs_blkid.rc != 0
+
+- name: Mount 60GB EBS volume to /data
+  ansible.posix.mount:
+    path: /data
+    src: /dev/xvdf
+    fstype: ext4
+    state: mounted
+
+- name: Create Harbor cert and secret directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+  loop:
+    - /data/cert
+    - /data/secret
+    - /opt/harbor
+
+- name: Generate OpenSSL SAN configuration file
+  ansible.builtin.copy:
+    dest: /data/cert/openssl.cnf
+    content: |
+      [req]
+      default_bits = 4096
+      prompt = no
+      default_md = sha256
+      distinguished_name = dn
+      req_extensions = req_ext
+
+      [dn]
+      C = VN
+      ST = HoChiMinh
+      L = ThuDuc
+      O = DevOpsLab
+      OU = CloudSec
+      CN = {{ harbor_hostname }}
+
+      [req_ext]
+      subjectAltName = @alt_names
+
+      [alt_names]
+      DNS.1 = {{ harbor_hostname }}
+      IP.1 = {{ harbor_private_ip | default(ansible_default_ipv4.address) }}
+      IP.2 = {{ ansible_host }}
+    mode: '0644'
+
+- name: Check if Harbor CA certificate already exists
+  ansible.builtin.stat:
+    path: /data/cert/ca.crt
+  register: harbor_ca_stat
+
+- name: Generate Self-Signed Root CA
+  ansible.builtin.shell: |
+    openssl req -x509 -newkey rsa:4096 -days 365 -nodes \
+      -keyout /data/cert/ca.key -out /data/cert/ca.crt \
+      -subj "/C=VN/ST=HoChiMinh/L=ThuDuc/O=DevOpsLab/CN=Harbor-Internal-Root-CA"
+  when: not harbor_ca_stat.stat.exists
+
+- name: Check if Harbor Server certificate already exists
+  ansible.builtin.stat:
+    path: /data/cert/harbor.crt
+  register: harbor_cert_stat
+
+- name: Generate Harbor Server CSR and signed Certificate with SAN
+  ansible.builtin.shell: |
+    openssl req -new -nodes -newkey rsa:4096 \
+      -keyout /data/cert/harbor.key -out /data/cert/harbor.csr \
+      -config /data/cert/openssl.cnf
+    openssl x509 -req -in /data/cert/harbor.csr \
+      -CA /data/cert/ca.crt -CAkey /data/cert/ca.key -CAcreateserial \
+      -out /data/cert/harbor.crt -days 365 \
+      -extfile /data/cert/openssl.cnf -extensions req_ext
+  when: not harbor_cert_stat.stat.exists
+
+- name: Fetch Harbor Root CA to control machine for K3s distribution
+  ansible.builtin.fetch:
+    src: /data/cert/ca.crt
+    dest: /tmp/harbor_ca.crt
+    flat: yes
+
+- name: Download Harbor installer tarball
+  ansible.builtin.get_url:
+    url: https://github.com/goharbor/harbor/releases/download/v2.10.2/harbor-online-installer-v2.10.2.tgz
+    dest: /opt/harbor-installer.tgz
+    mode: '0644'
+
+- name: Extract Harbor installer
+  ansible.builtin.unarchive:
+    src: /opt/harbor-installer.tgz
+    dest: /opt
+    remote_src: yes
+    creates: /opt/harbor/install.sh
+
+- name: Generate harbor.yml configuration from template
+  ansible.builtin.copy:
+    dest: /opt/harbor/harbor.yml
+    content: |
+      hostname: {{ harbor_hostname }}
+      http:
+        port: 80
+      https:
+        port: 443
+        certificate: /data/cert/harbor.crt
+        private_key: /data/cert/harbor.key
+      data_volume: /data
+      harbor_admin_password: "{{ harbor_admin_password | default('Harbor12345!') }}"
+      database:
+        password: "{{ harbor_db_password | default('HarborDBSecretPass123!') }}"
+      trivy:
+        ignore_unfixed: false
+        skip_update: false
+        offline_scan: false
+    mode: '0600'
+
+- name: Check if Harbor containers are already running
+  ansible.builtin.command: docker ps -q -f name=harbor-core
+  register: harbor_running
+  changed_when: false
+
+- name: Execute Harbor prepare script
+  ansible.builtin.command: ./prepare
+  args:
+    chdir: /opt/harbor
+  when: harbor_running.stdout == ""
+
+- name: Execute Harbor install script with Trivy
+  ansible.builtin.command: ./install.sh --with-trivy
+  args:
+    chdir: /opt/harbor
+  when: harbor_running.stdout == ""
+
+- name: Verify Harbor health API ping endpoint
+  ansible.builtin.uri:
+    url: "https://127.0.0.1/api/v2.0/ping"
+    validate_certs: no
+    status_code: 200
+  register: harbor_ping
+  retries: 10
+  delay: 5
+  until: harbor_ping.status == 200

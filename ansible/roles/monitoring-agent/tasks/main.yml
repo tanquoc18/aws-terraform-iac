@@ -1,8 +1,69 @@
 ---
 # Role: monitoring-agent
-# Nhiệm vụ:
-# - Tải và cài đặt Node Exporter (binary standalone) dưới dạng systemd service trên EC2 Harbor.
-# - Mở port 9100 cục bộ để cụm K3s (Prometheus trên Worker) cào metrics OS/EBS thời gian thực.
-- name: Placeholder - Setup Node Exporter
-  ansible.builtin.debug:
-    msg: "Monitoring Agent role skeleton ready for Phase 2 implementation."
+# Standalone Node Exporter installation for metrics scraping
+
+- name: Create node_exporter system group
+  ansible.builtin.group:
+    name: node_exporter
+    system: yes
+    state: present
+
+- name: Create node_exporter system user
+  ansible.builtin.user:
+    name: node_exporter
+    group: node_exporter
+    system: yes
+    shell: /sbin/nologin
+    create_home: no
+
+- name: Check if node_exporter binary exists
+  ansible.builtin.stat:
+    path: /usr/local/bin/node_exporter
+  register: node_exporter_bin
+
+- name: Download and extract Node Exporter binary
+  ansible.builtin.unarchive:
+    src: https://github.com/prometheus/node_exporter/releases/download/v1.7.0/node_exporter-1.7.0.linux-amd64.tar.gz
+    dest: /tmp
+    remote_src: yes
+  when: not node_exporter_bin.stat.exists
+
+- name: Copy node_exporter binary to /usr/local/bin
+  ansible.builtin.copy:
+    src: /tmp/node_exporter-1.7.0.linux-amd64/node_exporter
+    dest: /usr/local/bin/node_exporter
+    owner: node_exporter
+    group: node_exporter
+    mode: '0755'
+    remote_src: yes
+  when: not node_exporter_bin.stat.exists
+
+- name: Create systemd unit file for node_exporter
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/node_exporter.service
+    content: |
+      [Unit]
+      Description=Node Exporter Metrics Daemon
+      After=network.target
+
+      [Service]
+      User=node_exporter
+      Group=node_exporter
+      Type=simple
+      ExecStart=/usr/local/bin/node_exporter
+
+      [Install]
+      WantedBy=multi-user.target
+    mode: '0644'
+  register: node_exporter_service
+
+- name: Reload systemd daemon
+  ansible.builtin.systemd:
+    daemon_reload: yes
+  when: node_exporter_service.changed
+
+- name: Ensure node_exporter service is enabled and started
+  ansible.builtin.systemd:
+    name: node_exporter
+    state: started
+    enabled: yes

@@ -1,9 +1,77 @@
 ---
 # Role: k3s-agent
-# Nhiệm vụ:
-# - Cấu hình /etc/rancher/k3s/registries.yaml trust Root CA của Harbor.
-# - Cài đặt K3s Agent kết nối về Server qua K3S_URL=https://<Server_Private_IP>:6443 và K3S_TOKEN.
-# - Đảm bảo worker node sẵn sàng nhận workloads (FastAPI Pods, ArgoCD, Prometheus Stack).
-- name: Placeholder - Install K3s Worker Agent
-  ansible.builtin.debug:
-    msg: "K3s Agent role skeleton ready for Phase 2 implementation."
+# Automated installation of K3s Worker Agent node joining Control Plane via Private VPC IP
+
+- name: Ensure /etc/rancher/k3s directory exists
+  ansible.builtin.file:
+    path: /etc/rancher/k3s
+    state: directory
+    mode: '0755'
+
+- name: Add Harbor private IP mapping to /etc/hosts for private VPC pull
+  ansible.builtin.lineinfile:
+    path: /etc/hosts
+    line: "{{ harbor_private_ip }} {{ harbor_hostname }}"
+    state: present
+  when: harbor_private_ip is defined
+
+- name: Distribute Harbor Root CA to system trust store
+  ansible.builtin.copy:
+    src: /tmp/harbor_ca.crt
+    dest: /usr/local/share/ca-certificates/harbor-ca.crt
+    mode: '0644'
+  register: harbor_worker_ca
+
+- name: Update system CA certificates on Worker
+  ansible.builtin.command: update-ca-certificates
+  when: harbor_worker_ca.changed
+
+- name: Copy Harbor Root CA to K3s config directory on Worker
+  ansible.builtin.copy:
+    src: /tmp/harbor_ca.crt
+    dest: /etc/rancher/k3s/harbor-ca.crt
+    mode: '0644'
+
+- name: Configure /etc/rancher/k3s/registries.yaml for private Harbor trust
+  ansible.builtin.copy:
+    dest: /etc/rancher/k3s/registries.yaml
+    content: |
+      mirrors:
+        "{{ harbor_hostname }}":
+          endpoint:
+            - "https://{{ harbor_hostname }}"
+      configs:
+        "{{ harbor_hostname }}":
+          tls:
+            ca_file: "/etc/rancher/k3s/harbor-ca.crt"
+    mode: '0644'
+
+- name: Read K3s node join token from control node
+  ansible.builtin.slurp:
+    src: /tmp/k3s_node_token
+  register: local_token_b64
+  delegate_to: localhost
+  become: false
+
+- name: Set k3s_node_token fact on worker
+  ansible.builtin.set_fact:
+    k3s_node_token: "{{ local_token_b64.content | b64decode | trim }}"
+
+- name: Check if K3s agent is already installed
+  ansible.builtin.stat:
+    path: /usr/local/bin/k3s-agent
+  register: k3s_agent_bin
+
+- name: Install and join K3s Worker Agent to Server Control Plane
+  ansible.builtin.shell: |
+    curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="{{ k3s_version }}" \
+    K3S_URL="https://{{ k3s_server_private_ip }}:6443" \
+    K3S_TOKEN="{{ k3s_node_token }}" \
+    INSTALL_K3S_EXEC="agent --node-ip {{ worker_private_ip }} --flannel-iface eth0" sh -
+  when: not k3s_agent_bin.stat.exists
+
+- name: Ensure k3s-agent service is running and enabled
+  ansible.builtin.systemd:
+    name: k3s-agent
+    state: started
+    enabled: yes
