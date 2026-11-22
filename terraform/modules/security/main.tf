@@ -4,7 +4,7 @@
 # để tham chiếu referenced_security_group_id tường minh
 
 locals {
-  name_prefix = "${var.project_name}"
+  name_prefix = var.project_name
 }
 
 # ══════════════════════════════════════════════════════════════
@@ -12,7 +12,7 @@ locals {
 # ══════════════════════════════════════════════════════════════
 
 resource "aws_security_group" "k3s_server" {
-  name        = "sg-k3s-server"
+  name        = "${local.name_prefix}-k3s-server"
   description = "K3s Control Plane & Traefik Ingress – Public entrypoint"
   vpc_id      = var.vpc_id
   tags        = { Name = "sg-k3s-server", Project = "DevOps-2Tier" }
@@ -22,7 +22,7 @@ resource "aws_security_group" "k3s_server" {
 }
 
 resource "aws_security_group" "k3s_worker" {
-  name        = "sg-k3s-worker"
+  name        = "${local.name_prefix}-k3s-worker"
   description = "K3s Worker Node – CHẶN 100% Internet inbound"
   vpc_id      = var.vpc_id
   tags        = { Name = "sg-k3s-worker", Project = "DevOps-2Tier" }
@@ -31,7 +31,7 @@ resource "aws_security_group" "k3s_worker" {
 }
 
 resource "aws_security_group" "rds" {
-  name        = "sg-rds"
+  name        = "${local.name_prefix}-rds"
   description = "RDS PostgreSQL – Chỉ nhận từ sg-k3s-worker"
   vpc_id      = var.vpc_id
   tags        = { Name = "sg-rds", Project = "DevOps-2Tier" }
@@ -40,7 +40,7 @@ resource "aws_security_group" "rds" {
 }
 
 resource "aws_security_group" "harbor" {
-  name        = "sg-harbor"
+  name        = "${local.name_prefix}-harbor"
   description = "Harbor Registry – Public push & K3s pull"
   vpc_id      = var.vpc_id
   tags        = { Name = "sg-harbor", Project = "DevOps-2Tier" }
