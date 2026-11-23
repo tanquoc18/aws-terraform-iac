@@ -19,7 +19,7 @@ resource "aws_db_parameter_group" "rds" {
 
   parameter {
     name  = "rds.force_ssl"
-    value = "0"
+    value = "1"
   }
 
   tags = {

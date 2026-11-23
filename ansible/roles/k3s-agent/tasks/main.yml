@@ -52,23 +52,26 @@
   register: local_token_b64
   delegate_to: localhost
   become: false
+  no_log: true
 
 - name: Set k3s_node_token fact on worker
   ansible.builtin.set_fact:
     k3s_node_token: "{{ local_token_b64.content | b64decode | trim }}"
+  no_log: true
 
-- name: Check if K3s agent is already installed
+- name: Check if k3s-agent service is already installed
   ansible.builtin.stat:
-    path: /usr/local/bin/k3s-agent
-  register: k3s_agent_bin
+    path: /etc/systemd/system/k3s-agent.service
+  register: k3s_agent_service
 
 - name: Install and join K3s Worker Agent to Server Control Plane
   ansible.builtin.shell: |
-    curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="{{ k3s_version }}" \
+    curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="{{ k3s_version | default('v1.30.5+k3s1') }}" \
     K3S_URL="https://{{ k3s_server_private_ip }}:6443" \
     K3S_TOKEN="{{ k3s_node_token }}" \
-    INSTALL_K3S_EXEC="agent --node-ip {{ worker_private_ip }} --flannel-iface eth0" sh -
-  when: not k3s_agent_bin.stat.exists
+    INSTALL_K3S_EXEC="agent --node-ip {{ worker_private_ip }} --flannel-iface {{ ansible_default_ipv4.interface }} --node-label svccontroller.k3s.cattle.io/enablelb=false" sh -
+  when: not k3s_agent_service.stat.exists
+  no_log: true
 
 - name: Ensure k3s-agent service is running and enabled
   ansible.builtin.systemd:

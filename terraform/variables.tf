@@ -28,8 +28,8 @@ variable "project_name" {
   default     = "devops-2tier"
 
   validation {
-    condition     = can(regex("^[a-z0-9-]+$", var.project_name))
-    error_message = "Project name must contain only lowercase alphanumeric characters and hyphens."
+    condition     = can(regex("^[a-z0-9][a-z0-9-]*[a-z0-9]$", var.project_name)) && !startswith(var.project_name, "sg-")
+    error_message = "Project name must contain only lowercase alphanumeric characters and hyphens, cannot start with 'sg-', and must start and end with an alphanumeric character."
   }
 }
 
@@ -38,8 +38,8 @@ variable "my_ip_cidr" {
   type        = string
 
   validation {
-    condition     = can(cidrhost(var.my_ip_cidr, 0)) && can(cidrnetmask(var.my_ip_cidr))
-    error_message = "Must be a valid IPv4 CIDR block (e.g. 1.2.3.4/32)."
+    condition     = can(regex("^(\\d{1,3}\\.){3}\\d{1,3}/32$", var.my_ip_cidr)) && can(cidrhost(var.my_ip_cidr, 0))
+    error_message = "Must be a single IPv4 host CIDR block with /32 prefix (e.g. 1.2.3.4/32)."
   }
 }
 

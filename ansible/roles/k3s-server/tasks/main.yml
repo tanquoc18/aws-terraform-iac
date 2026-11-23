@@ -1,6 +1,6 @@
 ---
 # Role: k3s-server
-# Automated deployment of K3s Control Plane Server with Harbor CA trust & Traefik binding
+# Automated deployment of K3s Control Plane Server with Harbor CA trust & ServiceLB restriction
 
 - name: Ensure /etc/rancher/k3s directory exists
   ansible.builtin.file:
@@ -46,16 +46,16 @@
             ca_file: "/etc/rancher/k3s/harbor-ca.crt"
     mode: '0644'
 
-- name: Check if K3s is already installed
+- name: Check if K3s server service is already installed
   ansible.builtin.stat:
-    path: /usr/local/bin/k3s
-  register: k3s_bin
+    path: /etc/systemd/system/k3s.service
+  register: k3s_service_file
 
 - name: Install K3s Control Plane Server
   ansible.builtin.shell: |
-    curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="{{ k3s_version }}" \
-    INSTALL_K3S_EXEC="server --tls-san {{ ansible_host }} --tls-san {{ server_private_ip }} --node-ip {{ server_private_ip }} --flannel-iface eth0 --write-kubeconfig-mode 644" sh -
-  when: not k3s_bin.stat.exists
+    curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="{{ k3s_version | default('v1.30.5+k3s1') }}" \
+    INSTALL_K3S_EXEC="server --tls-san {{ ansible_host }} --tls-san {{ server_private_ip }} --node-ip {{ server_private_ip }} --flannel-iface {{ ansible_default_ipv4.interface }} --node-label svccontroller.k3s.cattle.io/enablelb=true --write-kubeconfig-mode 600" sh -
+  when: not k3s_service_file.stat.exists
 
 - name: Wait for K3s service to be active
   ansible.builtin.systemd:
@@ -72,24 +72,34 @@
   ansible.builtin.slurp:
     src: /var/lib/rancher/k3s/server/node-token
   register: node_token_b64
+  no_log: true
 
 - name: Set k3s_node_token fact for cluster worker nodes
   ansible.builtin.set_fact:
     k3s_node_token: "{{ node_token_b64.content | b64decode | trim }}"
+  no_log: true
 
-- name: Save K3s token to local control machine
+- name: Save K3s token to local control machine with restricted permissions
   ansible.builtin.copy:
     content: "{{ k3s_node_token }}"
     dest: /tmp/k3s_node_token
     mode: '0600'
   delegate_to: localhost
   become: false
+  no_log: true
 
-- name: Fetch kubeconfig to local control machine
+- name: Fetch kubeconfig to local control machine with restricted permissions
   ansible.builtin.fetch:
     src: /etc/rancher/k3s/k3s.yaml
     dest: /tmp/kubeconfig
     flat: yes
+
+- name: Ensure local kubeconfig has secure file permissions (0600)
+  ansible.builtin.file:
+    path: /tmp/kubeconfig
+    mode: '0600'
+  delegate_to: localhost
+  become: false
 
 - name: Replace 127.0.0.1 with Server Elastic IP in local kubeconfig
   ansible.builtin.replace:

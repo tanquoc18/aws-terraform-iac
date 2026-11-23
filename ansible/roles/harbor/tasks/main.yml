@@ -2,22 +2,43 @@
 # Role: harbor
 # Automated deployment of Harbor HTTPS Registry on dedicated 60GB EBS mount
 
-- name: Check if /dev/xvdf filesystem is formatted
-  ansible.builtin.command: blkid /dev/xvdf
+- name: Validate that harbor passwords are provided
+  ansible.builtin.assert:
+    that:
+      - harbor_admin_password is defined
+      - harbor_admin_password | length >= 8
+    fail_msg: "harbor_admin_password must be defined (min 8 characters) via vault or CLI extra vars."
+
+- name: Detect dedicated Harbor 60GB EBS volume device (xvdf or nvme*n1)
+  ansible.builtin.shell: |
+    for dev in /dev/xvdf /dev/nvme1n1 /dev/nvme2n1; do
+      if [ -b "$dev" ]; then echo "$dev"; exit 0; fi
+    done
+    lsblk -dpno NAME,SIZE | awk '$2 ~ /^60/ {print $1}' | head -n1
+  register: harbor_ebs_device_raw
+  changed_when: false
+  failed_when: harbor_ebs_device_raw.stdout == ""
+
+- name: Set harbor_data_device fact
+  ansible.builtin.set_fact:
+    harbor_data_device: "{{ harbor_ebs_device_raw.stdout | trim }}"
+
+- name: Check if dedicated EBS volume is already formatted
+  ansible.builtin.command: "blkid {{ harbor_data_device }}"
   register: ebs_blkid
   failed_when: false
   changed_when: false
 
-- name: Format /dev/xvdf with ext4 filesystem
+- name: Format dedicated EBS volume with ext4 filesystem
   community.general.filesystem:
     fstype: ext4
-    dev: /dev/xvdf
+    dev: "{{ harbor_data_device }}"
   when: ebs_blkid.rc != 0
 
 - name: Mount 60GB EBS volume to /data
   ansible.posix.mount:
     path: /data
-    src: /dev/xvdf
+    src: "{{ harbor_data_device }}"
     fstype: ext4
     state: mounted
 
@@ -55,8 +76,10 @@
 
       [alt_names]
       DNS.1 = {{ harbor_hostname }}
+      DNS.2 = localhost
       IP.1 = {{ harbor_private_ip | default(ansible_default_ipv4.address) }}
       IP.2 = {{ ansible_host }}
+      IP.3 = 127.0.0.1
     mode: '0644'
 
 - name: Check if Harbor CA certificate already exists
@@ -87,11 +110,29 @@
       -extfile /data/cert/openssl.cnf -extensions req_ext
   when: not harbor_cert_stat.stat.exists
 
+- name: Install Harbor Root CA into local system trust store
+  ansible.builtin.copy:
+    src: /data/cert/ca.crt
+    dest: /usr/local/share/ca-certificates/harbor-ca.crt
+    remote_src: yes
+    mode: '0644'
+  register: local_ca_install
+
+- name: Update local CA certificates
+  ansible.builtin.command: update-ca-certificates
+  when: local_ca_install.changed
+
 - name: Fetch Harbor Root CA to control machine for K3s distribution
   ansible.builtin.fetch:
     src: /data/cert/ca.crt
     dest: /tmp/harbor_ca.crt
     flat: yes
+
+- name: Add local hosts entry for Harbor domain resolution
+  ansible.builtin.lineinfile:
+    path: /etc/hosts
+    line: "127.0.0.1 {{ harbor_hostname }}"
+    state: present
 
 - name: Download Harbor installer tarball
   ansible.builtin.get_url:
@@ -118,38 +159,47 @@
         certificate: /data/cert/harbor.crt
         private_key: /data/cert/harbor.key
       data_volume: /data
-      harbor_admin_password: "{{ harbor_admin_password | default('Harbor12345!') }}"
+      harbor_admin_password: "{{ harbor_admin_password }}"
       database:
-        password: "{{ harbor_db_password | default('HarborDBSecretPass123!') }}"
+        password: "{{ harbor_db_password | default(harbor_admin_password) }}"
       trivy:
         ignore_unfixed: false
         skip_update: false
         offline_scan: false
     mode: '0600'
+  no_log: true
+  register: harbor_config
 
 - name: Check if Harbor containers are already running
   ansible.builtin.command: docker ps -q -f name=harbor-core
   register: harbor_running
   changed_when: false
 
+- name: Stop Harbor containers if configuration changed
+  ansible.builtin.command: docker compose down
+  args:
+    chdir: /opt/harbor
+  when: harbor_config.changed and harbor_running.stdout != ""
+
 - name: Execute Harbor prepare script
   ansible.builtin.command: ./prepare
   args:
     chdir: /opt/harbor
-  when: harbor_running.stdout == ""
+  when: (harbor_running.stdout == "") or harbor_config.changed
 
 - name: Execute Harbor install script with Trivy
   ansible.builtin.command: ./install.sh --with-trivy
   args:
     chdir: /opt/harbor
-  when: harbor_running.stdout == ""
+  when: (harbor_running.stdout == "") or harbor_config.changed
 
-- name: Verify Harbor health API ping endpoint
+- name: Verify Harbor health API ping endpoint with TLS verification enabled
   ansible.builtin.uri:
-    url: "https://127.0.0.1/api/v2.0/ping"
-    validate_certs: no
+    url: "https://{{ harbor_hostname }}/api/v2.0/ping"
+    ca_path: /data/cert/ca.crt
+    validate_certs: yes
     status_code: 200
   register: harbor_ping
-  retries: 10
+  retries: 12
   delay: 5
   until: harbor_ping.status == 200

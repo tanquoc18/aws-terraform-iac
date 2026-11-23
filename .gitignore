@@ -6,7 +6,6 @@ crash.*.log
 *.tfvars
 !terraform.tfvars.example
 .terraform/
-.terraform.lock.hcl
 
 # Ansible & Secrets
 *.pem
@@ -19,3 +18,5 @@ ansible/group_vars/vault.yml
 .DS_Store
 .idea/
 .vscode/
+__pycache__/
+*.pyc
