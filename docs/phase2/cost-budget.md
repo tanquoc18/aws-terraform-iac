@@ -42,11 +42,26 @@ Tổng dung lượng ổ cứng EBS trong toàn bộ hệ thống là **130 GB g
 
 ## 3. Tổng Hợp Ngân Sách Dự Kiến
 
-* **Chi phí vận hành hệ thống khi ĐANG CHẠY (Running):**
-  $$\text{Compute } (\$0.1844) + \text{IPv4 (3 IPs) } (\$0.0150) + \text{Storage } (\$0.0174) \approx \mathbf{\$0.2168 / \text{giờ}}$$
-* **Tổng chi phí ước tính cho 20 giờ thực hành Lab thực tế:**
-  $$\text{Phí vận hành 20h } (20 \times \$0.2168 = \$4.34) + \text{Phí lưu trữ ổ đĩa 10 ngày Lab } (\$4.24) \approx \mathbf{\$8.50 - \$10.00 USD}$$
-* **Hạn mức AWS Academy:** Tài khoản Learner Lab cấp **$100.00 USD**. Dự toán chi phí Phase 2 chiếm **dưới 10%** tổng ngân sách được cấp, hoàn toàn an toàn và nằm trong ngưỡng kiểm soát.
+* **Chi phí vận hành hệ thống khi ĐANG CHẠY (Running - theo giờ):**
+  $$\text{Compute } (\$0.1844) + \text{IPv4 (3 IPs) } (\$0.0150) \approx \mathbf{\$0.1994 / \text{giờ}}$$
+  *(Chi phí lưu trữ ổ cứng tính theo ngày/tháng liên tục, không cộng dồn hai lần vào giờ chạy).*
+
+* **Bóc tách chi phí toàn diện cho kịch bản Lab 10 ngày (20 giờ chạy, 220 giờ dừng):**
+  1. **Chi phí Compute (20 giờ chạy thực hành):**
+     $$20 \text{ giờ} \times \$0.1844 = \mathbf{\$3.69 \text{ USD}}$$
+  2. **Chi phí Public IPv4 trong 20 giờ chạy (3 IPs):**
+     $$20 \text{ giờ} \times 3 \text{ IPs} \times \$0.0050 = \mathbf{\$0.30 \text{ USD}}$$
+  3. **Chi phí duy trì 2 Elastic IPs trong 220 giờ dừng (Harbor & Server EIPs):**
+     $$220 \text{ giờ} \times 2 \text{ EIPs} \times \$0.0050 = \mathbf{\$2.20 \text{ USD}}$$
+     *(Theo chính sách AWS từ 01/02/2024, Elastic IP gắn vào instance đang dừng vẫn bị tính phí $0.005/h; Public IP tự cấp của Worker được thu hồi khi dừng nên $0.00).*
+  4. **Chi phí Lưu trữ Cố định Toàn kỳ 10 ngày (Storage):**
+     $$\text{EBS 130 GB } (\$3.47) + \text{RDS 20 GB } (\$0.77) + \text{S3 } (< \$0.01) = \mathbf{\$4.24 \text{ USD}}$$
+  5. **Dự phòng Data Transfer & RDS Snapshots/Backups:**
+     $$\text{Data Transfer (Docker pull, OS updates, Trivy DB) + Snapshots} \approx \mathbf{\$1.00 - \$1.50 \text{ USD}}$$
+
+* **TỔNG CHI PHÍ DỰ KIẾN TOÀN KỲ:**
+  $$\$3.69 + \$0.30 + \$2.20 + \$4.24 + \$1.00 \approx \mathbf{\$11.43 - \$12.00 \text{ USD}}$$
+* **Đánh giá Hạn mức AWS Academy:** Tài khoản Learner Lab cấp **$100.00 USD**. Dự toán chi phí Phase 2 chiếm khoảng **11.5% - 12.0%** tổng ngân sách được cấp. Ngân sách đảm bảo khả thi nhưng cần quản lý chặt chẽ theo Runbook, tránh để quên tài nguyên không stop.
 
 ---
 
@@ -58,10 +73,10 @@ Tổng dung lượng ổ cứng EBS trong toàn bộ hệ thống là **130 GB g
 1. **Chi phí Compute (vCPU & RAM):**
    - EC2 instances và RDS instance: Giảm về **$0.00 / giờ** khi ở trạng thái `stopped`.
 2. **Chi phí Lưu trữ Ổ cứng (EBS & RDS Storage):**
-   - **VẪN TIẾP TỤC BỊ TÍNH PHÍ** vì dữ liệu vẫn được lưu trên ổ đĩa AWS ($10.40/tháng cho 130GB EBS và $2.30/tháng cho 20GB RDS).
+   - **VẪN TIẾP TỤC BỊ TÍNH PHÍ** vì dữ liệu vẫn được lưu trên ổ đĩa AWS ($10.40/tháng cho 130GB EBS và $2.30/tháng cho 20GB RDS, tương đương ~$0.424/ngày).
 3. **Chi phí Địa chỉ Public IPv4 / Elastic IP khi Stop:**
    - **Public IP của Worker:** Tự động giải phóng khi Stop instance $\rightarrow$ **Không tốn phí** khi stop.
-   - **2 Elastic IPs (Harbor & K3s Server):** Khi máy chủ gắn EIP bị STOP, EIP chuyển sang trạng thái *unassociated / idle* $\rightarrow$ **AWS vẫn tính phí $0.005 / IP / giờ** ($0.24 / ngày cho 2 EIPs).
+   - **2 Elastic IPs (Harbor & K3s Server):** Kể từ 01/02/2024, AWS tính phí **$0.005 / IP / giờ** cho tất cả Public IPv4 in-use. Khi máy chủ dừng, EIP vẫn gắn với ENI của instance $\rightarrow$ **AWS vẫn tiếp tục tính phí $0.005 / IP / giờ** ($0.24 / ngày cho 2 EIPs, tức ~$2.20 cho 220 giờ dừng).
 4. **Quy tắc tự động bật của RDS:**
    - Theo cơ chế mặc định của AWS, một RDS instance bị Stop sẽ **tự động khởi động lại sau 7 ngày liên tục** để áp dụng cập nhật bảo trì. Quản trị viên cần chú ý kiểm tra trước mốc 7 ngày.
 
