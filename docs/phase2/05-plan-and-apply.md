@@ -13,12 +13,12 @@
 
 | Hạng mục S3 State Bucket | Cấu hình thực tế | Trạng thái AWS Runtime |
 |---|---|---|
-| **Tên Bucket S3** | `devops-lab-tfstate-us-east-1` | `APPLIED` / `PENDING` |
-| **Khu vực (Region)** | `us-east-1` | `PASS` |
-| **Versioning** | `Enabled` (bảo vệ lịch sử và rollback state) | `PASS` |
-| **Mã hóa (SSE)** | `AES256` (SSE-S3, tối ưu chi phí) | `PASS` |
-| **Public Access Block** | Chặn 100% Public Access (4/4 flags = true) | `PASS` |
-| **State Locking** | S3 Native Locking (`use_lockfile = true`) | `PASS` |
+| **Tên Bucket S3** | `devops-lab-tfstate-us-east-1` | `NOT APPLIED` (Chờ chạy bootstrap apply tại Gate 1) |
+| **Khu vực (Region)** | `us-east-1` | `TBD — template kiểm chứng` |
+| **Versioning** | `Enabled` (bảo vệ lịch sử và rollback state) | `TBD — template kiểm chứng` |
+| **Mã hóa (SSE)** | `AES256` (SSE-S3, tối ưu chi phí) | `TBD — template kiểm chứng` |
+| **Public Access Block** | Chặn 100% Public Access (4/4 flags = true) | `TBD — template kiểm chứng` |
+| **State Locking** | S3 Native Locking (`use_lockfile = true`) | `TBD — template kiểm chứng` |
 
 ---
 
@@ -48,16 +48,21 @@
 
 ---
 
-## 3. Nhật Ký Thực Thi `terraform apply` (Sau khi được duyệt)
+## 3. Nhật Ký Thực Thi `terraform apply` (Template Ghi Nhận Khi Được Phê Duyệt Gate 1)
 
-- **Thời gian Apply:** `YYYY-MM-DD HH:MM:SS`
+> [!NOTE]
+> **Quy định minh bạch trạng thái:** Mục này là **Template biểu mẫu** dành cho quá trình triển khai thực tế trên AWS. Hiện tại chưa chạy apply trên AWS, toàn bộ các giá trị runtime được đánh dấu `NOT APPLIED` / `TBD` để phân biệt rõ giữa "Cấu hình đã khai báo trong Code" và "Bằng chứng đã kiểm chứng trên Runtime".
+
+- **Trạng thái thực thi:** `NOT APPLIED` (Chưa được phép chạy apply trên AWS)
+- **Thời gian Apply:** `TBD — Sau khi có chữ ký phê duyệt Gate 1`
 - **Người thực thi:** Thành viên 1
-- **Exit Code:** `0` (Apply complete!)
-- **Tóm tắt tài nguyên sau Apply:**
-  + **Harbor Instance ID / EIP:** `i-xxxxxxx` / `x.x.x.x`
-  + **K3s Server Instance ID / EIP:** `i-xxxxxxx` / `x.x.x.x`
-  + **K3s Worker Instance ID / Public IP:** `i-xxxxxxx` / `x.x.x.x`
-  + **RDS Endpoint (Sanitized):** `devops-2tier-rds.xxxxxx.us-east-1.rds.amazonaws.com:5432`
+- **Exit Code:** `TBD (Chưa thực thi)`
+- **Tóm tắt tài nguyên sau Apply (Biểu mẫu điền sau khi apply thật):**
+  + **Harbor Instance ID / EIP:** `TBD (i-xxxxxxx / x.x.x.x)`
+  + **Harbor Dedicated EBS Volume ID:** `TBD (vol-xxxxxxx)`
+  + **K3s Server Instance ID / EIP:** `TBD (i-xxxxxxx / x.x.x.x)`
+  + **K3s Worker Instance ID / Public IP:** `TBD (i-xxxxxxx / x.x.x.x)`
+  + **RDS Endpoint (Sanitized):** `TBD (devops-2tier-rds.xxxxxx.us-east-1.rds.amazonaws.com:5432)`
 
 ---
 

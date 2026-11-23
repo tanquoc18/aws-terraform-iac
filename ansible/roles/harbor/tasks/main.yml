@@ -2,22 +2,86 @@
 # Role: harbor
 # Automated deployment of Harbor HTTPS Registry on dedicated 60GB EBS mount
 
-- name: Validate that harbor passwords are provided
+- name: Validate that harbor passwords and volume ID are provided
   ansible.builtin.assert:
     that:
       - harbor_admin_password is defined
       - harbor_admin_password | length >= 8
-    fail_msg: "harbor_admin_password must be defined (min 8 characters) via vault or CLI extra vars."
+      - harbor_db_password is defined
+      - harbor_db_password | length >= 8
+      - harbor_admin_password != harbor_db_password
+    fail_msg: "harbor_admin_password and distinct harbor_db_password (min 8 characters) must be defined via vault or extra vars."
 
-- name: Detect dedicated Harbor 60GB EBS volume device (xvdf or nvme*n1)
+- name: Validate that harbor_volume_id is provided
+  ansible.builtin.assert:
+    that:
+      - harbor_volume_id is defined
+      - harbor_volume_id | length > 0
+      - harbor_volume_id is match('^vol-[0-9a-fA-F]+$')
+    fail_msg: "harbor_volume_id must be provided matching format 'vol-xxxxxxxxxxxxxxxxx' from Terraform output."
+  when: not (ansible_check_mode | default(false))
+
+- name: Safely identify dedicated Harbor EBS volume by Volume ID (AWS identify-nvme-ebs-device)
   ansible.builtin.shell: |
-    for dev in /dev/xvdf /dev/nvme1n1 /dev/nvme2n1; do
-      if [ -b "$dev" ]; then echo "$dev"; exit 0; fi
+    set -euo pipefail
+    TARGET_VOL="{{ harbor_volume_id }}"
+    SANITIZED_ID="${TARGET_VOL//-/}"
+    MATCHED_DEV=""
+
+    # 1. Search NVMe sysfs serials (/sys/block/nvme*n1/serial)
+    for devpath in /sys/block/nvme*n1; do
+      if [ -f "$devpath/serial" ]; then
+        SERIAL=$(cat "$devpath/serial" | tr -d '[:space:]')
+        if [[ "$SERIAL" == *"$SANITIZED_ID"* ]] || [[ "$SERIAL" == *"$TARGET_VOL"* ]]; then
+          DEVNAME=$(basename "$devpath")
+          MATCHED_DEV="/dev/$DEVNAME"
+          break
+        fi
+      fi
     done
-    lsblk -dpno NAME,SIZE | awk '$2 ~ /^60/ {print $1}' | head -n1
+
+    # 2. Check /dev/disk/by-id/ symlinks if not yet matched
+    if [ -z "$MATCHED_DEV" ] && [ -d /dev/disk/by-id ]; then
+      for link in /dev/disk/by-id/*; do
+        if [[ "$link" == *"$SANITIZED_ID"* ]] || [[ "$link" == *"$TARGET_VOL"* ]]; then
+          REAL_DEV=$(readlink -f "$link")
+          if [ -b "$REAL_DEV" ]; then
+            MATCHED_DEV="$REAL_DEV"
+            break
+          fi
+        fi
+      done
+    fi
+
+    # 3. Fallback for Xen legacy virtualization (/dev/xvdf)
+    if [ -z "$MATCHED_DEV" ] && [ -b /dev/xvdf ]; then
+      MATCHED_DEV="/dev/xvdf"
+    fi
+
+    # 4. Fail-closed if no device matched
+    if [ -z "$MATCHED_DEV" ] || [ ! -b "$MATCHED_DEV" ]; then
+      echo "CRITICAL: Could not find EBS block device matching Volume ID $TARGET_VOL. Halting to prevent data loss." >&2
+      exit 1
+    fi
+
+    # 5. Safety verification: MUST NOT BE ROOT DEVICE
+    ROOT_DEV=$(findmnt -n -o SOURCE / || echo "/dev/root")
+    if [[ "$ROOT_DEV" == "$MATCHED_DEV"* ]]; then
+      echo "CRITICAL: Matched device $MATCHED_DEV is the ROOT disk! Halting immediately." >&2
+      exit 1
+    fi
+
+    # 6. Safety verification: Volume size check (Expected ~60GB = ~64424509440 bytes)
+    DEV_BYTES=$(lsblk -bno SIZE "$MATCHED_DEV" | head -n1)
+    if [ "$DEV_BYTES" -lt 58000000000 ] || [ "$DEV_BYTES" -gt 66000000000 ]; then
+      echo "CRITICAL: Device $MATCHED_DEV size ($DEV_BYTES bytes) does not match expected 60GB volume! Halting." >&2
+      exit 1
+    fi
+
+    echo "$MATCHED_DEV"
   register: harbor_ebs_device_raw
   changed_when: false
-  failed_when: harbor_ebs_device_raw.stdout == ""
+  when: not (ansible_check_mode | default(false))
 
 - name: Set harbor_data_device fact
   ansible.builtin.set_fact:
@@ -161,7 +225,7 @@
       data_volume: /data
       harbor_admin_password: "{{ harbor_admin_password }}"
       database:
-        password: "{{ harbor_db_password | default(harbor_admin_password) }}"
+        password: "{{ harbor_db_password }}"
       trivy:
         ignore_unfixed: false
         skip_update: false

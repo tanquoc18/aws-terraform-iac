@@ -18,19 +18,18 @@
 
 ### 1.2. Repository Backend: `python-app-backend`
 * **URL:** `https://github.com/CaoSangg/python-app-backend.git`
-* **Nhánh phát triển:** `feature/phase1-docker`
-* **Commit SHA hiện tại:** `8d8b1f7074d58e13ce02378b65ca9187886f024f` (*"fix(test): isolate test database to db_test (songs_test_db) with safety guard"*)
-* **Trạng thái PR vào `main`:** **`PENDING`** (Chưa merge vào nhánh `main` của `CaoSangg/python-app-backend`).
-* **Trạng thái Release Tag (`v1.0.0-phase1`):** **`PENDING`** (Chưa tạo tag do chờ merge PR vào `main`).
-* **Kết quả kiểm thử & Hardening:**
-  - Bộ kiểm thử hiện tại: 53/53 tests pass với 100% test coverage trên core endpoints CRUD (`/songs`, `/health/live`, `/health/ready`).
-  - Kế hoạch Phase 1 release hardening hướng tới bộ mở rộng 63 tests (bao gồm validation edge cases và mock failure tests).
-  - Tách biệt database môi trường: service `db_test` riêng (`songs_test_db`), có Safety Guard trong `test_songs_api.py` từ chối chạy trên database ứng dụng (`songs_db`).
-  - Container an toàn: Non-root user `appuser:10001`, Alembic migration service tự động chạy trước FastAPI (`depends_on: service_completed_successfully`), migration head `750af730f01c`.
+* **Nhánh làm việc chính thức:** `main` (và nhánh chuẩn bị `feature/phase2-app-preparation` của TV2).
+* **Commit SHA baseline hiện tại trên `main`:** `91df667ec1ad8e877b5a1cab51f1025a3891e515` (`91df667`).
+* **Trạng thái Release Hardening:** PR #3 (`chore/phase1-check`) đã **MERGE** vào `main` tại commit `901fe18`. Commit `c2a3b97` là ancestor của baseline. Diff từ merge PR #3 tới baseline rỗng cho `project/`, `docker-compose.yml` và `.env.example`.
+* **Trạng thái Release Tag (`v1.0.0-phase1`):** **`PENDING`** (Chưa thấy tag trên remote, baseline theo commit SHA `91df667` đã xác minh).
+* **Kết quả kiểm thử & Hardening tại SHA `91df667`:**
+  - **Bộ kiểm thử chính thức: 63/63 tests PASS** trên Python 3.12 gồm 42 unit API tests, 10 database isolation guards, và 11 integration tests (với `docker compose --profile test run --rm --build -T test`).
+  - **Test coverage trên module `app` đạt 100%** (bao gồm branch coverage).
+  - Tách biệt database môi trường: service `db_test` riêng (`songs_test_db`), có Safety Guard trong `test_songs_api.py` và `test_database_isolation.py` từ chối chạy trên database ứng dụng (`songs_db`).
+  - Container an toàn: Multi-stage build, Non-root user `appuser:10001`, Alembic migration single head `750af730f01c`.
 * **Bằng chứng Persistence:**
   - Dữ liệu PostgreSQL được lưu trữ bền vững qua Docker named volume `postgres_data` gắn vào `/var/lib/postgresql/data`.
-  - Khởi động lại container (`docker compose down` rồi `docker compose up`) dữ liệu bảng `song` vẫn được bảo toàn nguyên vẹn.
-
+  - Khởi động lại container (`docker compose down` rồi `docker compose up`) dữ liệu bảng `song` vẫn được bảo tồn nguyên vẹn.
 ---
 
 ## 2. Rà Soát Hiện Trạng Mã Nguồn IaC & Ansible (Khoảng Trống Cần Làm)
@@ -51,6 +50,6 @@
 ## 3. Kết Luận Baseline Gate 0 (P2-00)
 
 * [x] **IaC Repo:** Nhánh `main` đã chốt tại commit `92f397a` (đã merge PR #1).
-* [ ] **Backend Repo:** Nhánh `feature/phase1-docker` tại commit `8d8b1f7` đang ở trạng thái **`PENDING`** review/merge vào `main` và chờ đóng tag `v1.0.0-phase1`.
+* [x] **Backend Repo:** Nhánh `main` tại SHA `91df667` (PR hardening #3 đã merge tại `901fe18`, 63/63 tests PASS, coverage 100%). Release tag `v1.0.0-phase1` trạng thái `PENDING`.
 * [x] **Phân định phạm vi:** Xác định chính xác toàn bộ khoảng trống kỹ thuật của Terraform và Ansible cần triển khai trong P2-02 đến P2-08.
 * [x] **Nguyên tắc an toàn:** Không tự nhận tài nguyên AWS đã hoàn thành khi mới có file cấu hình; không commit bí mật hay state lên Git.

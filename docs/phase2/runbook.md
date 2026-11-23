@@ -32,7 +32,9 @@ Mỗi buổi thực hành kết thúc, việc duy trì EC2 và RDS ở trạng t
    ```powershell
    aws ec2 start-instances --instance-ids $(aws ec2 describe-instances --filters "Name=tag:Project,Values=devops-2tier" "Name=instance-state-name,Values=stopped" --query "Reservations[*].Instances[*].InstanceId" --output text)
    ```
-   *(Do Harbor và K3s Server sử dụng Elastic IP cố định, IP Public và tên miền `nip.io` hoàn toàn không bị thay đổi sau khi khởi động lại).*
+   *(Do Harbor và K3s Server sử dụng Elastic IP cố định, IP Public và tên miền `nip.io` hoàn toàn không bị thay đổi sau khi khởi động lại).
+> [!IMPORTANT]
+> **Lưu ý chi phí Elastic IP khi Stop:** Kể từ 01/02/2024, AWS tính phí **$0.005/giờ/EIP** cho cả Elastic IP gắn với EC2 đang ở trạng thái stopped (~$0.24/ngày cho 2 EIPs). Do đó, khi nghỉ Lab dài ngày (> 3 ngày), nên giải phóng hoặc teardown theo quy định để tiết kiệm tối đa ngân sách.*
 
 ---
 

@@ -14,6 +14,11 @@ output "harbor_private_ip" {
   value       = module.ec2_harbor.private_ip
 }
 
+output "harbor_data_volume_id" {
+  description = "Harbor dedicated 60GB EBS volume ID"
+  value       = module.ec2_harbor.data_volume_id
+}
+
 output "k3s_server_public_ip" {
   description = "Elastic IP of K3s Server - used for kubeconfig and ingress domain"
   value       = module.ec2_k3s.server_elastic_ip

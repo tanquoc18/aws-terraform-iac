@@ -10,19 +10,20 @@
 
 ## 1. Thông tin Phiên làm việc và Danh tính AWS (Caller Identity)
 
-| Thông số | Giá trị thực tế từ AWS CLI / SDK (Đã làm sạch) | Trạng thái | Ghi chú |
+| Thông số | Giá trị xác minh (Public Report Sanitized) | Trạng thái | Ghi chú |
 |---|---|---|---|
-| **AWS Account ID** | `645921******` (Đã ẩn 6 số cuối) | `VERIFIED` | Tài khoản AWS Academy Learner Lab |
-| **IAM User / Role** | `voclabs/user5436930=******@gm.uit.edu.vn` (Đã ẩn email sinh viên) | `VERIFIED` | Role được cấp quyền tạm thời qua STS |
-| **Caller ARN** | `arn:aws:sts::645921******:assumed-role/voclabs/...` | `VERIFIED` | Phiên xác thực hợp lệ |
-| **Default Region** | `us-east-1` (US East - N. Virginia) | `VERIFIED` | Khu vực mặc định được Lab cấp quyền |
+| **AWS Account** | AWS Academy Learner Lab (Masked) | `VERIFIED` | Tài khoản thực hành có kiểm soát quota |
+| **IAM Caller Role** | `voclabs/LabSession` (Assumed Role) | `VERIFIED` | Quyền tạm thời cấp qua STS session |
+| **IAM Instance Profile** | `LabInstanceProfile` | `VERIFIED` | Profile gán cho EC2 Harbor, Server, Worker |
+| **Default Region** | `us-east-1` (US East - N. Virginia) | `VERIFIED` | Khu vực mặc định được cấp quyền |
 
 *Log thực tế (Sanitized):*
 ```json
 {
-  "UserId": "AROAZMY7I27BMT7LFYRI4:user5436930=******@gm.uit.edu.vn",
-  "Account": "645921******",
-  "Arn": "arn:aws:sts::645921******:assumed-role/voclabs/user5436930=******@gm.uit.edu.vn"
+  "CallerIdentity": "VERIFIED_VALID",
+  "AuthMechanism": "STS_ASSUMED_ROLE",
+  "SessionRole": "voclabs/LabSession",
+  "Region": "us-east-1"
 }
 ```
 

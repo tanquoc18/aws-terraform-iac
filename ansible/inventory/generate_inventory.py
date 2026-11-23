@@ -23,6 +23,7 @@ def get_terraform_outputs(terraform_dir):
 def generate_hosts_ini(outputs, output_path):
     harbor_public_ip = outputs["harbor_public_ip"]["value"]
     harbor_private_ip = outputs["harbor_private_ip"]["value"]
+    harbor_volume_id = outputs.get("harbor_data_volume_id", {}).get("value", "")
     k3s_server_public_ip = outputs["k3s_server_public_ip"]["value"]
     k3s_server_private_ip = outputs["k3s_server_private_ip"]["value"]
     k3s_worker_public_ip = outputs["k3s_worker_public_ip"]["value"]
@@ -33,7 +34,7 @@ def generate_hosts_ini(outputs, output_path):
 # Source: Live Terraform outputs
 
 [harbor]
-harbor_server ansible_host={harbor_public_ip} harbor_private_ip={harbor_private_ip} ansible_user=ubuntu
+harbor_server ansible_host={harbor_public_ip} harbor_private_ip={harbor_private_ip} harbor_volume_id={harbor_volume_id} ansible_user=ubuntu
 
 [k3s_server]
 k3s_master ansible_host={k3s_server_public_ip} server_private_ip={k3s_server_private_ip} ansible_user=ubuntu
@@ -54,10 +55,11 @@ ansible_ssh_common_args='-o StrictHostKeyChecking=accept-new'
 harbor_hostname=hub.{harbor_public_ip}.nip.io
 harbor_public_ip={harbor_public_ip}
 harbor_private_ip={harbor_private_ip}
+harbor_volume_id={harbor_volume_id}
 k3s_server_public_ip={k3s_server_public_ip}
 k3s_server_private_ip={k3s_server_private_ip}
 k3s_worker_private_ip={k3s_worker_private_ip}
-k3s_version=v1.30.5+k3s1
+k3s_version=v1.35.1+k3s1
 rds_endpoint={rds_endpoint}
 """
 

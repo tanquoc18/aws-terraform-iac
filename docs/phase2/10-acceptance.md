@@ -42,12 +42,14 @@
 ### 2.1. Kịch bản Kiểm chứng Luồng Cho Phép (Allowed Traffic)
 1. **Client -> Traefik Ingress (K3s Server) -> Pod FastAPI (Worker):**
    ```bash
+   curl -i http://<K3S_SERVER_EIP>/health/live
+   curl -i http://<K3S_SERVER_EIP>/health/ready
    curl -i http://<K3S_SERVER_EIP>/songs
    # Kỳ vọng sau triển khai: HTTP/1.1 200 OK kèm danh sách JSON từ RDS PostgreSQL
    ```
 2. **FastAPI Pod (trên Worker) -> RDS PostgreSQL:**
    ```bash
-   kubectl exec -it deployment/fastapi-app -- nc -zv <RDS_ADDRESS> 5432
+   kubectl -n <NAMESPACE> exec -it deployment/song-api -c api -- nc -zv <RDS_ADDRESS> 5432
    # Kỳ vọng sau triển khai: Connection to <RDS_ADDRESS> 5432 port [tcp/postgresql] succeeded!
    ```
 3. **K3s Nodes -> Harbor Registry (HTTPS 443 với CA Trust):**

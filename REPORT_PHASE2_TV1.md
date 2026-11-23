@@ -37,8 +37,8 @@ Trong Phase 2, Thành viên 1 phụ trách toàn bộ hạ tầng và nền tả
 * **6 Roles Hoàn Thiện & Hội Tụ (Idempotent):**
   - `common`: Tắt swap vĩnh viễn, nạp kernel modules `overlay`, `br_netfilter` và sysctl cho CNI Flannel.
   - `docker`: Docker CE Engine + Compose plugin, log driver giới hạn 50MB chống tràn ổ cứng.
-  - `harbor`: Nhận diện đĩa linh hoạt (hỗ trợ cả `/dev/xvdf` và NVMe trên Nitro), mount 60GB EBS vào `/data`, sinh cert TLS SAN (`hub.<EIP>.nip.io`), cài đặt Harbor v2.10.2 kèm Trivy Scanner, phân phối Root CA, không hardcode mật khẩu trong source code.
-  - `k3s-server` & `k3s-agent`: Nâng cấp và ghim phiên bản K3s **`v1.30.5+k3s1`**, tự động nhận diện interface qua `ansible_default_ipv4.interface`, cấu hình ServiceLB hạn chế placement trên Server, cấu hình `registries.yaml` tin cậy Root CA của Harbor, bảo vệ kubeconfig với mode `0600` và bảo mật token (`no_log: true`).
+  - `harbor`: Nhận diện đĩa an toàn bằng Volume ID do Terraform xuất (`identify-nvme-ebs-device`), kiểm tra dung lượng ~60GB và loại trừ root disk trước khi format/mount vào `/data`, sinh cert TLS SAN (`hub.<EIP>.nip.io`), cài đặt Harbor v2.10.2 kèm Trivy Scanner, phân phối Root CA, tách biệt mật khẩu admin và mật khẩu database (`harbor_admin_password`, `harbor_db_password`), không hardcode mật khẩu trong source code.
+  - `k3s-server` & `k3s-agent`: Nâng cấp và ghim phiên bản K3s được hỗ trợ tích cực **`v1.35.1+k3s1`** (hỗ trợ đến 2027), tự động nhận diện interface qua `ansible_default_ipv4.interface`, cấu hình ServiceLB chọn node theo allow-list (chỉ Server node có nhãn `enablelb=true`, Worker hoàn toàn không có nhãn), cấu hình `registries.yaml` tin cậy Root CA của Harbor, bảo vệ kubeconfig với mode `0600` và bảo mật token (`no_log: true`).
   - `monitoring-agent`: Cài đặt Node Exporter trên port 9100.
 * **Dependencies Collections:** Bổ sung `ansible/requirements.yml` ghim collections `ansible.posix` và `community.general`.
 

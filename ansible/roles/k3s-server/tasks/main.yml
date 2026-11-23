@@ -53,7 +53,7 @@
 
 - name: Install K3s Control Plane Server
   ansible.builtin.shell: |
-    curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="{{ k3s_version | default('v1.30.5+k3s1') }}" \
+    curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="{{ k3s_version | default('v1.35.1+k3s1') }}" \
     INSTALL_K3S_EXEC="server --tls-san {{ ansible_host }} --tls-san {{ server_private_ip }} --node-ip {{ server_private_ip }} --flannel-iface {{ ansible_default_ipv4.interface }} --node-label svccontroller.k3s.cattle.io/enablelb=true --write-kubeconfig-mode 600" sh -
   when: not k3s_service_file.stat.exists
 

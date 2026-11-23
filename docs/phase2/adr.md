@@ -95,9 +95,9 @@
 * **Trạng thái:** `PENDING_REVIEW` (Cập nhật phiên bản còn hỗ trợ)
 * **Ngữ cảnh:** Triển khai cụm Kubernetes gọn nhẹ cho lab; phiên bản v1.29.5 đã cũ.
 * **Đề xuất:**
-  - **Phiên bản K3s:** Nâng cấp và ghim phiên bản ổn định còn được hỗ trợ chính thức: **`v1.30.5+k3s1`** (hoặc `v1.30.x` LTS).
+  - **Phiên bản K3s:** Sử dụng phiên bản ổn định được hỗ trợ tích cực theo SUSE Product Support Lifecycle: **`v1.35.1+k3s1`** (nhánh K3s v1.35 được duy trì hỗ trợ đến 2027, thay thế phiên bản v1.30 đã kết thúc hỗ trợ vào tháng 06/2025).
   - **Datastore:** Sử dụng embedded SQLite mặc định trên Server node (đáp ứng tiêu chuẩn single control-plane lab).
-  - **Ingress Controller:** Giữ nguyên Traefik Ingress Controller mặc định của K3s, cấu hình ServiceLB hạn chế placement để chỉ Server node làm public entrypoint cho cổng 80/443.
+  - **Ingress Controller & ServiceLB:** Sử dụng Traefik Ingress Controller mặc định. Cấu hình ServiceLB chọn node bằng allow-list: Server node được gán `--node-label svccontroller.k3s.cattle.io/enablelb=true`, Worker node **hoàn toàn không gán nhãn `enablelb`** để ServiceLB controller chỉ chọn Server node làm public entrypoint cho cổng 80/443.
 
 ---
 

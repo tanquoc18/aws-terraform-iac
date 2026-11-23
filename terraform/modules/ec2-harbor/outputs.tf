@@ -13,3 +13,8 @@ output "private_ip" {
   description = "Harbor EC2 private IP"
   value       = aws_instance.harbor.private_ip
 }
+
+output "data_volume_id" {
+  description = "Harbor dedicated 60GB EBS volume ID"
+  value       = aws_ebs_volume.harbor_data.id
+}

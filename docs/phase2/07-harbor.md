@@ -11,7 +11,7 @@
 ## 1. Kiến Trúc Lưu Trữ & Tên Miền Harbor
 
 - **Máy chủ:** EC2 `t3.medium` tại Public Subnet 2.
-- **Lưu trữ chuyên dụng:** Gắn ổ cứng EBS **60GB gp3** định dạng `ext4` và mount vào thư mục `/data`. Script Ansible tự động nhận diện cả tên thiết bị truyền thống (`/dev/xvdf`) lẫn NVMe controller (`/dev/nvme*n1`) trên kiến trúc AWS Nitro.
+- **Lưu trữ chuyên dụng:** Gắn ổ cứng EBS **60GB gp3** định dạng `ext4` và mount vào thư mục `/data`. Script Ansible tự động nhận diện chính xác thiết bị theo EBS Volume ID (`vol-xxxx`) do Terraform xuất ra (tuân thủ tài liệu AWS `identify-nvme-ebs-device`), kiểm tra kích thước ~60GB và xác nhận không phải ổ root trước khi format/mount, bảo đảm fail-closed an toàn tuyệt đối.
 - **Domain Wildcard:** `hub.<HARBOR_EIP>.nip.io` phân giải trực tiếp về Elastic IP của Harbor.
 - **Private VPC Route:** K3s Server và Worker tự động ánh xạ `hub.<HARBOR_EIP>.nip.io` về Private IP nội bộ của Harbor (`10.0.2.x`) trong `/etc/hosts` để kéo image siêu tốc qua mạng nội bộ.
 
@@ -35,7 +35,7 @@
      + Hệ thống CA trust của máy chủ Harbor (`/usr/local/share/ca-certificates/harbor-ca.crt`).
      + `/etc/rancher/k3s/registries.yaml` trên cả K3s Server và Worker node.
 4. **Bảo mật Credentials:**
-   - Mật khẩu admin được nạp qua biến môi trường hoặc Ansible Vault (`harbor_admin_password`), không hardcode giá trị mặc định trong Git.
+   - Mật khẩu admin và mật khẩu database được quản lý tách biệt qua biến môi trường hoặc Ansible Vault (`harbor_admin_password`, `harbor_db_password`), nghiêm cấm dùng chung hoặc hardcode trong Git.
    - File cấu hình `harbor.yml` được đặt phân quyền bảo mật nghiêm ngặt `mode: 0600` với cờ `no_log: true`.
 
 ---
@@ -52,10 +52,11 @@
    curl --cacert /data/cert/ca.crt https://hub.<HARBOR_EIP>.nip.io/api/v2.0/ping
    # Kỳ vọng: HTTP/1.1 200 OK với phản hồi "pong"
    ```
-3. **Thử nghiệm Đăng nhập và Push Image bằng Docker CLI:**
+3. **Thử nghiệm Đăng nhập và Push Image bằng Docker CLI (Khớp TV2 Workload):**
    ```bash
    # Sử dụng biến môi trường cho credentials
-   echo "$HARBOR_PASSWORD" | docker login hub.<HARBOR_EIP>.nip.io -u admin --password-stdin
-   docker tag python:3.11-slim hub.<HARBOR_EIP>.nip.io/library/test:v1
-   docker push hub.<HARBOR_EIP>.nip.io/library/test:v1
+   echo "$HARBOR_PASSWORD" | docker login hub.<HARBOR_EIP>.nip.io -u <ROBOT_OR_ADMIN_USER> --password-stdin
+   docker tag song-management:$SOURCE_SHA hub.<HARBOR_EIP>.nip.io/<project>/song-management:$SOURCE_SHA
+   docker push hub.<HARBOR_EIP>.nip.io/<project>/song-management:$SOURCE_SHA
+   docker buildx imagetools inspect hub.<HARBOR_EIP>.nip.io/<project>/song-management:$SOURCE_SHA
    ```
