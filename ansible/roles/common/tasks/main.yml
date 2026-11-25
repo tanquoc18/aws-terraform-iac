@@ -1,22 +1,68 @@
 ---
 # Role: common
-# Nhiệm vụ:
-# - Cấu hình múi giờ (Asia/Ho_Chi_Minh), cập nhật apt packages cơ bản (curl, wget, htop, ca-certificates).
-# - Tắt Swap vĩnh viễn (bắt buộc cho Kubernetes K3s).
-# - Cấu hình sysctl: net.ipv4.ip_forward=1, bridge-nf-call-iptables=1 cho CNI Flannel.
-- name: Ensure swap is disabled (Required for K3s)
-  ansible.builtin.command: swapoff -a
+# Idempotent tasks for base OS configuration across all nodes
+
+- name: Update apt cache
+  ansible.builtin.apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Install prerequisite base packages
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - curl
+      - gnupg
+      - lsb-release
+      - apt-transport-https
+      - software-properties-common
+      - htop
+      - jq
+      - tar
+      - gzip
+    state: present
+
+- name: Check if swap is currently active
+  ansible.builtin.command: swapon --show
+  register: swap_status
   changed_when: false
 
-- name: Remove swap entry from /etc/fstab
+- name: Disable swap immediately if active
+  ansible.builtin.command: swapoff -a
+  when: swap_status.stdout != ""
+
+- name: Remove swap entry from /etc/fstab to persist across reboots
   ansible.builtin.replace:
     path: /etc/fstab
     regexp: '^(\s*)([^#\n]+\s+swap\s+\w+\s+\w+\s+\w+)'
     replace: '# \2'
 
-- name: Enable kernel IP forwarding
-  ansible.posix.sysctl:
-    name: net.ipv4.ip_forward
-    value: '1'
+- name: Configure kernel modules required by K3s Flannel and containerd
+  ansible.builtin.copy:
+    dest: /etc/modules-load.d/k8s.conf
+    content: |
+      overlay
+      br_netfilter
+    mode: '0644'
+
+- name: Load overlay kernel module
+  community.general.modprobe:
+    name: overlay
     state: present
-    reload: true
+
+- name: Load br_netfilter kernel module
+  community.general.modprobe:
+    name: br_netfilter
+    state: present
+
+- name: Apply sysctl parameters for Kubernetes networking
+  ansible.posix.sysctl:
+    name: "{{ item.name }}"
+    value: "{{ item.value }}"
+    state: present
+    reload: yes
+    sysctl_file: /etc/sysctl.d/99-kubernetes-cri.conf
+  loop:
+    - { name: 'net.ipv4.ip_forward', value: '1' }
+    - { name: 'net.bridge.bridge-nf-call-iptables', value: '1' }
+    - { name: 'net.bridge.bridge-nf-call-ip6tables', value: '1' }

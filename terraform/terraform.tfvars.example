@@ -1,12 +1,15 @@
 # terraform/terraform.tfvars.example
 # USAGE: cp terraform.tfvars.example terraform.tfvars
-# CẢNH BÁO: Không commit terraform.tfvars (chứa secrets)
+# WARNING: Never commit terraform.tfvars containing real credentials!
 
-aws_region    = "us-east-1"
-environment   = "lab"
-project_name  = "devops-2tier"
-my_ip_cidr    = "1.2.3.4/32"   # Thay bằng IP thực: curl ifconfig.me
-key_pair_name = "devops-lab-key"
-db_username   = "appuser"
-db_name       = "appdb"
-db_password   = "CHANGE_ME_STRONG_PASSWORD"
+aws_region           = "us-east-1"
+availability_zones   = ["us-east-1a", "us-east-1b"]
+environment          = "lab"
+project_name         = "devops-2tier"
+my_ip_cidr           = "1.2.3.4/32" # Replace with your real public IP: curl ifconfig.me
+key_pair_name        = "vockey"     # Default key pair in AWS Academy
+iam_instance_profile = "LabInstanceProfile"
+db_instance_class    = "db.t3.micro"
+db_username          = "appuser"
+db_name              = "appdb"
+db_password          = "CHANGE_ME_STRONG_PASSWORD_123!"

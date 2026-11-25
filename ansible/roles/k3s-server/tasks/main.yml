@@ -1,10 +1,110 @@
 ---
 # Role: k3s-server
-# Nhiệm vụ:
-# - Cài đặt K3s Control Plane (v1.29.5+k3s1) kèm flags: --tls-san <EIP>, --tls-san <Private_IP>.
-# - Giữ nguyên Traefik Ingress Controller và Klipper ServiceLB mặc định.
-# - Cấu hình /etc/rancher/k3s/registries.yaml trust Root CA của Harbor.
-# - Trích xuất file kubeconfig và k3s cluster token lưu về local/vault để worker node join vào.
-- name: Placeholder - Install K3s Control Plane
-  ansible.builtin.debug:
-    msg: "K3s Server role skeleton ready for Phase 2 implementation."
+# Automated deployment of K3s Control Plane Server with Harbor CA trust & ServiceLB restriction
+
+- name: Ensure /etc/rancher/k3s directory exists
+  ansible.builtin.file:
+    path: /etc/rancher/k3s
+    state: directory
+    mode: '0755'
+
+- name: Add Harbor private IP mapping to /etc/hosts for private VPC pull
+  ansible.builtin.lineinfile:
+    path: /etc/hosts
+    line: "{{ harbor_private_ip }} {{ harbor_hostname }}"
+    state: present
+  when: harbor_private_ip is defined
+
+- name: Distribute Harbor Root CA to system trust store
+  ansible.builtin.copy:
+    src: /tmp/harbor_ca.crt
+    dest: /usr/local/share/ca-certificates/harbor-ca.crt
+    mode: '0644'
+  register: harbor_system_ca
+
+- name: Update system CA certificates
+  ansible.builtin.command: update-ca-certificates
+  when: harbor_system_ca.changed
+
+- name: Copy Harbor Root CA to K3s config directory
+  ansible.builtin.copy:
+    src: /tmp/harbor_ca.crt
+    dest: /etc/rancher/k3s/harbor-ca.crt
+    mode: '0644'
+
+- name: Configure /etc/rancher/k3s/registries.yaml for private Harbor trust
+  ansible.builtin.copy:
+    dest: /etc/rancher/k3s/registries.yaml
+    content: |
+      mirrors:
+        "{{ harbor_hostname }}":
+          endpoint:
+            - "https://{{ harbor_hostname }}"
+      configs:
+        "{{ harbor_hostname }}":
+          tls:
+            ca_file: "/etc/rancher/k3s/harbor-ca.crt"
+    mode: '0644'
+
+- name: Check if K3s server service is already installed
+  ansible.builtin.stat:
+    path: /etc/systemd/system/k3s.service
+  register: k3s_service_file
+
+- name: Install K3s Control Plane Server
+  ansible.builtin.shell: |
+    curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="{{ k3s_version | default('v1.35.10+k3s1') }}" \
+    INSTALL_K3S_EXEC="server --tls-san {{ ansible_host }} --tls-san {{ server_private_ip }} --node-ip {{ server_private_ip }} --flannel-iface {{ ansible_default_ipv4.interface }} --node-label svccontroller.k3s.cattle.io/enablelb=true --write-kubeconfig-mode 600" sh -
+  when: not k3s_service_file.stat.exists
+
+- name: Wait for K3s service to be active
+  ansible.builtin.systemd:
+    name: k3s
+    state: started
+    enabled: yes
+
+- name: Wait for node-token to be generated
+  ansible.builtin.wait_for:
+    path: /var/lib/rancher/k3s/server/node-token
+    timeout: 60
+
+- name: Read K3s node join token
+  ansible.builtin.slurp:
+    src: /var/lib/rancher/k3s/server/node-token
+  register: node_token_b64
+  no_log: true
+
+- name: Set k3s_node_token fact for cluster worker nodes
+  ansible.builtin.set_fact:
+    k3s_node_token: "{{ node_token_b64.content | b64decode | trim }}"
+  no_log: true
+
+- name: Save K3s token to local control machine with restricted permissions
+  ansible.builtin.copy:
+    content: "{{ k3s_node_token }}"
+    dest: /tmp/k3s_node_token
+    mode: '0600'
+  delegate_to: localhost
+  become: false
+  no_log: true
+
+- name: Fetch kubeconfig to local control machine with restricted permissions
+  ansible.builtin.fetch:
+    src: /etc/rancher/k3s/k3s.yaml
+    dest: /tmp/kubeconfig
+    flat: yes
+
+- name: Ensure local kubeconfig has secure file permissions (0600)
+  ansible.builtin.file:
+    path: /tmp/kubeconfig
+    mode: '0600'
+  delegate_to: localhost
+  become: false
+
+- name: Replace 127.0.0.1 with Server Elastic IP in local kubeconfig
+  ansible.builtin.replace:
+    path: /tmp/kubeconfig
+    regexp: 'https://127\.0\.0\.1:6443'
+    replace: "https://{{ ansible_host }}:6443"
+  delegate_to: localhost
+  become: false
