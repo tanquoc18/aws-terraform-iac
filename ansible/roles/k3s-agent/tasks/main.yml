@@ -66,10 +66,10 @@
 
 - name: Install and join K3s Worker Agent to Server Control Plane
   ansible.builtin.shell: |
-    curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="{{ k3s_version | default('v1.35.1+k3s1') }}" \
+    curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="{{ k3s_version | default('v1.35.10+k3s1') }}" \
     K3S_URL="https://{{ k3s_server_private_ip }}:6443" \
     K3S_TOKEN="{{ k3s_node_token }}" \
-    INSTALL_K3S_EXEC="agent --node-ip {{ worker_private_ip }} --flannel-iface {{ ansible_default_ipv4.interface }}" sh -
+    INSTALL_K3S_EXEC="agent --node-ip {{ worker_private_ip }} --flannel-iface {{ ansible_default_ipv4.interface }} --node-label node-role.kubernetes.io/worker=worker" sh -
   when: not k3s_agent_service.stat.exists
   no_log: true
 

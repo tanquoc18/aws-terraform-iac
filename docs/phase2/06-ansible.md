@@ -60,3 +60,7 @@ ansible-playbook -i inventory/hosts.ini playbooks/01-site.yml
 ansible-playbook -i inventory/hosts.ini playbooks/01-site.yml
 # Kỳ vọng: Toàn bộ tasks đều trả về 'ok', changed=0, failed=0
 ```
+
+> [!NOTE]
+> **Giới hạn và phạm vi kiểm tra `--check` (dry-run):**
+> Các tác vụ phụ thuộc trạng thái phần cứng runtime động (như truy vấn NVMe sysfs để nhận diện Volume ID của EBS thật hoặc sinh token K3s Server trước khi cài đặt) được cấu hình guard an toàn (`ansible_check_mode`) để không gây lỗi cú pháp hoặc crash playbook trong chế độ dry-run. Để kiểm chứng hội tụ và idempotency đầy đủ, chạy playbook hoàn chỉnh trên các instance sau khi đã `terraform apply`.

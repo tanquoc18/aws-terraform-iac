@@ -11,7 +11,7 @@
 ## 1. Kiến Trúc Lưu Trữ & Tên Miền Harbor
 
 - **Máy chủ:** EC2 `t3.medium` tại Public Subnet 2.
-- **Lưu trữ chuyên dụng:** Gắn ổ cứng EBS **60GB gp3** định dạng `ext4` và mount vào thư mục `/data`. Script Ansible tự động nhận diện chính xác thiết bị theo EBS Volume ID (`vol-xxxx`) do Terraform xuất ra (tuân thủ tài liệu AWS `identify-nvme-ebs-device`), kiểm tra kích thước ~60GB và xác nhận không phải ổ root trước khi format/mount, bảo đảm fail-closed an toàn tuyệt đối.
+- **Lưu trữ chuyên dụng:** Gắn ổ cứng EBS **60GB gp3** định dạng `ext4` và mount vào thư mục `/data`. Script Ansible tự động nhận diện chính xác thiết bị theo EBS Volume ID (`vol-xxxx`) do Terraform xuất ra (tuân thủ tài liệu AWS `identify-nvme-ebs-device`), kiểm tra kích thước ~60GB và xác nhận không phải ổ root trước khi format/mount; loại bỏ hoàn toàn các fallback không xác minh danh tính volume, bảo đảm fail-closed an toàn tuyệt đối.
 - **Domain Wildcard:** `hub.<HARBOR_EIP>.nip.io` phân giải trực tiếp về Elastic IP của Harbor.
 - **Private VPC Route:** K3s Server và Worker tự động ánh xạ `hub.<HARBOR_EIP>.nip.io` về Private IP nội bộ của Harbor (`10.0.2.x`) trong `/etc/hosts` để kéo image siêu tốc qua mạng nội bộ.
 

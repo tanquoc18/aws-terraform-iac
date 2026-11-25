@@ -2,16 +2,30 @@
 """
 generate_inventory.py
 Generates Ansible inventory (ansible/inventory/hosts.ini) dynamically from live Terraform outputs.
-Ensures zero placeholder IPs, applies secure SSH ProxyJump for K3s Worker through K3s Server Bastion
-with host key verification enabled (StrictHostKeyChecking=accept-new), and exports Harbor/K3s variables.
+Ensures zero placeholder IPs, validates all required outputs, performs atomic writes,
+applies secure SSH ProxyJump for K3s Worker through K3s Server Bastion with host key verification,
+and exits with non-zero status on any failure.
 """
 
 import json
 import os
 import subprocess
 import sys
+import tempfile
+
+REQUIRED_OUTPUT_KEYS = [
+    "harbor_public_ip",
+    "harbor_private_ip",
+    "harbor_data_volume_id",
+    "k3s_server_public_ip",
+    "k3s_server_private_ip",
+    "k3s_worker_public_ip",
+    "k3s_worker_private_ip",
+]
 
 def get_terraform_outputs(terraform_dir):
+    if not os.path.isdir(terraform_dir):
+        raise FileNotFoundError(f"Terraform directory does not exist: {terraform_dir}")
     try:
         cmd = ["terraform", "output", "-json"]
         result = subprocess.run(cmd, cwd=terraform_dir, capture_output=True, text=True, check=True)
@@ -20,10 +34,24 @@ def get_terraform_outputs(terraform_dir):
         print(f"Error executing terraform output: {e.stderr}", file=sys.stderr)
         raise RuntimeError("Failed to read Terraform state. Ensure infrastructure is applied.") from e
 
+def validate_outputs(outputs):
+    missing_or_empty = []
+    for key in REQUIRED_OUTPUT_KEYS:
+        if key not in outputs:
+            missing_or_empty.append(f"{key} (missing)")
+        else:
+            val = outputs[key].get("value")
+            if val is None or str(val).strip() == "":
+                missing_or_empty.append(f"{key} (empty value)")
+    if missing_or_empty:
+        raise ValueError(f"Required Terraform outputs validation failed: {', '.join(missing_or_empty)}")
+
 def generate_hosts_ini(outputs, output_path):
+    validate_outputs(outputs)
+
     harbor_public_ip = outputs["harbor_public_ip"]["value"]
     harbor_private_ip = outputs["harbor_private_ip"]["value"]
-    harbor_volume_id = outputs.get("harbor_data_volume_id", {}).get("value", "")
+    harbor_volume_id = outputs["harbor_data_volume_id"]["value"]
     k3s_server_public_ip = outputs["k3s_server_public_ip"]["value"]
     k3s_server_private_ip = outputs["k3s_server_private_ip"]["value"]
     k3s_worker_public_ip = outputs["k3s_worker_public_ip"]["value"]
@@ -59,12 +87,26 @@ harbor_volume_id={harbor_volume_id}
 k3s_server_public_ip={k3s_server_public_ip}
 k3s_server_private_ip={k3s_server_private_ip}
 k3s_worker_private_ip={k3s_worker_private_ip}
-k3s_version=v1.35.1+k3s1
+k3s_version=v1.35.10+k3s1
 rds_endpoint={rds_endpoint}
 """
 
-    with open(output_path, "w", encoding="utf-8") as f:
-        f.write(inventory_content)
+    out_dir = os.path.dirname(os.path.abspath(output_path))
+    os.makedirs(out_dir, exist_ok=True)
+
+    # Atomic write to avoid partial or corrupted files
+    tmp_file = tempfile.NamedTemporaryFile("w", dir=out_dir, delete=False, encoding="utf-8")
+    try:
+        tmp_file.write(inventory_content)
+        tmp_file.flush()
+        os.fsync(tmp_file.fileno())
+        tmp_file.close()
+        os.replace(tmp_file.name, output_path)
+    except Exception:
+        if os.path.exists(tmp_file.name):
+            os.remove(tmp_file.name)
+        raise
+
     print(f"Inventory successfully generated at {output_path}")
 
 if __name__ == "__main__":
@@ -77,5 +119,6 @@ if __name__ == "__main__":
         tf_outputs = get_terraform_outputs(tf_dir)
         generate_hosts_ini(tf_outputs, target_ini)
     except Exception as err:
-        print(f"Could not generate live inventory: {err}", file=sys.stderr)
-        print("To generate manually after terraform apply, run: python ansible/inventory/generate_inventory.py")
+        print(f"ERROR: Could not generate live inventory: {err}", file=sys.stderr)
+        print("To generate manually after terraform apply, run: python ansible/inventory/generate_inventory.py", file=sys.stderr)
+        sys.exit(1)

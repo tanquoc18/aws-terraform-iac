@@ -48,8 +48,10 @@ Thực hiện trên máy chủ K3s Server:
 # 1. Tạo thư mục chứa bản backup
 sudo mkdir -p /opt/k3s-backup
 
-# 2. Tạo snapshot dữ liệu SQLite của K3s
-sudo cp -r /var/lib/rancher/k3s/server/db/state.db /opt/k3s-backup/state-$(date +%Y%m%d).db
+# 2. Tạo snapshot dữ liệu SQLite an toàn (sử dụng sqlite3 online backup để tránh rách giao dịch)
+sudo sqlite3 /var/lib/rancher/k3s/server/db/state.db ".backup '/opt/k3s-backup/state-$(date +%Y%m%d).db'"
+# Hoặc dừng service tạm thời nếu sao lưu bằng lệnh cp:
+# sudo systemctl stop k3s && sudo cp /var/lib/rancher/k3s/server/db/state.db /opt/k3s-backup/ && sudo systemctl start k3s
 
 # 3. Sao lưu token xác thực của cụm
 sudo cp /var/lib/rancher/k3s/server/node-token /opt/k3s-backup/node-token.bak
@@ -79,8 +81,8 @@ Khi cả 2 thành viên đã hoàn thành và lưu trữ đầy đủ bằng ch�
    ```
 2. **Thực thi hủy tài nguyên qua Terraform:**
    ```powershell
-   Set-Location d:\DevOps\aws-terraform-iac\terraform
-   terraform destroy -auto-approve
+   Set-Location terraform
+   terraform destroy  # Xác nhận Yes khi được cả 2 thành viên duyệt
    ```
 3. **Kiểm tra giải phóng Elastic IPs:**
    Đảm bảo toàn bộ 2 EIPs đã được release, không còn tài nguyên nào treo phát sinh phí.

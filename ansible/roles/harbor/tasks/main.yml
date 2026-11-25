@@ -25,13 +25,13 @@
   ansible.builtin.shell: |
     set -euo pipefail
     TARGET_VOL="{{ harbor_volume_id }}"
-    SANITIZED_ID="${TARGET_VOL//-/}"
+    SANITIZED_ID=$(echo "$TARGET_VOL" | tr -d '-')
     MATCHED_DEV=""
 
     # 1. Search NVMe sysfs serials (/sys/block/nvme*n1/serial)
     for devpath in /sys/block/nvme*n1; do
       if [ -f "$devpath/serial" ]; then
-        SERIAL=$(cat "$devpath/serial" | tr -d '[:space:]')
+        SERIAL=$(tr -d '[:space:]' < "$devpath/serial")
         if [[ "$SERIAL" == *"$SANITIZED_ID"* ]] || [[ "$SERIAL" == *"$TARGET_VOL"* ]]; then
           DEVNAME=$(basename "$devpath")
           MATCHED_DEV="/dev/$DEVNAME"
@@ -53,25 +53,20 @@
       done
     fi
 
-    # 3. Fallback for Xen legacy virtualization (/dev/xvdf)
-    if [ -z "$MATCHED_DEV" ] && [ -b /dev/xvdf ]; then
-      MATCHED_DEV="/dev/xvdf"
-    fi
-
-    # 4. Fail-closed if no device matched
+    # 3. Fail-closed: Strictly require verified Volume ID match (NO unverified fallback)
     if [ -z "$MATCHED_DEV" ] || [ ! -b "$MATCHED_DEV" ]; then
-      echo "CRITICAL: Could not find EBS block device matching Volume ID $TARGET_VOL. Halting to prevent data loss." >&2
+      echo "CRITICAL: Could not find verified EBS block device matching Volume ID $TARGET_VOL. Halting to prevent data loss." >&2
       exit 1
     fi
 
-    # 5. Safety verification: MUST NOT BE ROOT DEVICE
+    # 4. Safety verification: MUST NOT BE ROOT DEVICE
     ROOT_DEV=$(findmnt -n -o SOURCE / || echo "/dev/root")
     if [[ "$ROOT_DEV" == "$MATCHED_DEV"* ]]; then
       echo "CRITICAL: Matched device $MATCHED_DEV is the ROOT disk! Halting immediately." >&2
       exit 1
     fi
 
-    # 6. Safety verification: Volume size check (Expected ~60GB = ~64424509440 bytes)
+    # 5. Safety verification: Volume size check (Expected ~60GB = ~64424509440 bytes)
     DEV_BYTES=$(lsblk -bno SIZE "$MATCHED_DEV" | head -n1)
     if [ "$DEV_BYTES" -lt 58000000000 ] || [ "$DEV_BYTES" -gt 66000000000 ]; then
       echo "CRITICAL: Device $MATCHED_DEV size ($DEV_BYTES bytes) does not match expected 60GB volume! Halting." >&2
@@ -79,25 +74,28 @@
     fi
 
     echo "$MATCHED_DEV"
+  args:
+    executable: /bin/bash
   register: harbor_ebs_device_raw
   changed_when: false
   when: not (ansible_check_mode | default(false))
 
 - name: Set harbor_data_device fact
   ansible.builtin.set_fact:
-    harbor_data_device: "{{ harbor_ebs_device_raw.stdout | trim }}"
+    harbor_data_device: "{{ harbor_ebs_device_raw.stdout | trim if (harbor_ebs_device_raw is defined and 'stdout' in harbor_ebs_device_raw and harbor_ebs_device_raw.stdout != '') else '/dev/mock-ebs-check-mode' }}"
 
 - name: Check if dedicated EBS volume is already formatted
   ansible.builtin.command: "blkid {{ harbor_data_device }}"
   register: ebs_blkid
   failed_when: false
   changed_when: false
+  when: not (ansible_check_mode | default(false))
 
 - name: Format dedicated EBS volume with ext4 filesystem
   community.general.filesystem:
     fstype: ext4
     dev: "{{ harbor_data_device }}"
-  when: ebs_blkid.rc != 0
+  when: not (ansible_check_mode | default(false)) and (ebs_blkid is defined and ebs_blkid.rc | default(0) != 0)
 
 - name: Mount 60GB EBS volume to /data
   ansible.posix.mount:
@@ -105,16 +103,17 @@
     src: "{{ harbor_data_device }}"
     fstype: ext4
     state: mounted
+  when: not (ansible_check_mode | default(false))
 
-- name: Create Harbor cert and secret directories
+- name: Create Harbor directories
   ansible.builtin.file:
-    path: "{{ item }}"
+    path: "{{ item.path }}"
     state: directory
-    mode: '0755'
+    mode: "{{ item.mode }}"
   loop:
-    - /data/cert
-    - /data/secret
-    - /opt/harbor
+    - { path: '/data/cert', mode: '0700' }
+    - { path: '/data/secret', mode: '0700' }
+    - { path: '/opt/harbor', mode: '0755' }
 
 - name: Generate OpenSSL SAN configuration file
   ansible.builtin.copy:
@@ -198,11 +197,12 @@
     line: "127.0.0.1 {{ harbor_hostname }}"
     state: present
 
-- name: Download Harbor installer tarball
+- name: Download Harbor installer tarball (v2.12.2 supported release with sha256 check)
   ansible.builtin.get_url:
-    url: https://github.com/goharbor/harbor/releases/download/v2.10.2/harbor-online-installer-v2.10.2.tgz
+    url: https://github.com/goharbor/harbor/releases/download/v2.12.2/harbor-online-installer-v2.12.2.tgz
     dest: /opt/harbor-installer.tgz
     mode: '0644'
+    checksum: "sha256:42e20c69edc73e4fb3ad3ccd4071afe449a7a61e5e2ea4021da206f958b5d350"
 
 - name: Extract Harbor installer
   ansible.builtin.unarchive:
